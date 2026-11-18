@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>國一英文單字大挑戰 - Lesson 3</title>
+    <!-- 載入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 載入 Tone.js 用於遊戲音效 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <!-- 載入 Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #fae8ff 100%);
+            min-height: 100vh;
+            user-select: none;
+        }
+        .en-font {
+            font-family: 'Fredoka', 'Noto Sans TC', sans-serif;
+        }
+        /* 自訂動畫效果 */
+        @keyframes popIn {
+            0% { transform: scale(0.85); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-6px); }
+            40%, 80% { transform: translateX(6px); }
+        }
+        .animate-pop {
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        .animate-shake {
+            animation: shake 0.4s ease-in-out;
+        }
+        .card-shadow {
+            box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.15), 0 8px 10px -6px rgba(59, 130, 246, 0.1);
+        }
+        .btn-push {
+            transition: all 0.1s ease;
+        }
+        .btn-push:active {
+            transform: translateY(3px);
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center p-3 sm:p-6 text-slate-800">
+
+    <!-- 主遊戲容器 -->
+    <div id="app" class="w-full max-w-3xl bg-white/95 backdrop-blur-md rounded-3xl card-shadow border border-white overflow-hidden transition-all duration-300">
+        
+        <!-- 頂部狀態列 (開始畫面以外顯示) -->
+        <header id="game-header" class="hidden bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 text-white p-4 sm:px-6">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                    <span id="stage-badge" class="bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full text-xs sm:text-sm font-bold tracking-wider">
+                        第 1 關
+                    </span>
+                    <h2 id="stage-title" class="font-bold text-base sm:text-lg">看英選中</h2>
+                </div>
+                <div class="flex items-center gap-3 sm:gap-5">
+                    <div class="text-xs sm:text-sm bg-black/20 px-3 py-1 rounded-full">
+                        進度：<span id="progress-text" class="font-bold text-yellow-300">1 / 10</span>
+                    </div>
+                    <div class="text-xs sm:text-sm bg-black/20 px-3 py-1 rounded-full">
+                        總分：<span id="score-text" class="font-bold text-emerald-300 text-base">0</span> / 100
+                    </div>
+                </div>
+            </div>
+            <!-- 總進度條 -->
+            <div class="w-full bg-black/20 h-2 rounded-full mt-3 overflow-hidden">
+                <div id="total-progress-bar" class="bg-yellow-400 h-full transition-all duration-500 rounded-full" style="width: 0%"></div>
+            </div>
+        </header>
+
+        <!-- 遊戲內容動態區 -->
+        <main id="game-container" class="p-5 sm:p-8 min-h-[420px] flex flex-col justify-center">
+            <!-- 畫面將由 JavaScript 動態渲染 -->
+        </main>
+
+    </div>
+
+    <!-- 底部版權/提示 -->
+    <footer class="mt-4 text-center text-xs text-slate-500">
+        國一英文 Lesson 3 單字複習系統 • 支援語音發音與即時批改
+    </footer>
+
+    <script>
+        /**
+         * 1. 完整單字資料庫 (依據圖片 Lesson 3 共 40 個單字/片語)
+         * 每個物件包含：
+         * - id: 編號 1~40
+         * - word: 英文單字/片語
+         * - pos: 詞性 (若無則為空字串)
+         * - meaning: 中文意思
+         * - category: 分類 (Word Bank / Dialogue / Reading)
+         * - acceptableAnswers: 拼寫題可接受的答案陣列 (處理大小寫、省略號或標點符號)
+         */
+        const VOCAB_LIST = [
+            // Word Bank (1-9)
+            { id: 1, word: "living room", pos: "n.", meaning: "客廳", category: "Word Bank", acceptableAnswers: ["living room"] },
+            { id: 2, word: "bedroom", pos: "n.", meaning: "臥室", category: "Word Bank", acceptableAnswers: ["bedroom"] },
+            { id: 3, word: "bathroom", pos: "n.", meaning: "浴室", category: "Word Bank", acceptableAnswers: ["bathroom"] },
+            { id: 4, word: "dining room", pos: "n.", meaning: "飯廳", category: "Word Bank", acceptableAnswers: ["dining room"] },
+            { id: 5, word: "behind", pos: "prep.", meaning: "在……後面", category: "Word Bank", acceptableAnswers: ["behind"] },
+            { id: 6, word: "in front of", pos: "prep.", meaning: "在……前面", category: "Word Bank", acceptableAnswers: ["in front of"] },
+            { id: 7, word: "between", pos: "prep.", meaning: "在……中間", category: "Word Bank", acceptableAnswers: ["between"] },
+            { id: 8, word: "next to", pos: "prep.", meaning: "在……旁邊", category: "Word Bank", acceptableAnswers: ["next to"] },
+            { id: 9, word: "near", pos: "prep.", meaning: "在……附近", category: "Word Bank", acceptableAnswers: ["near"] },
+            
+            // Dialogue (10-30)
+            { id: 10, word: "please", pos: "int.", meaning: "請", category: "Dialogue", acceptableAnswers: ["please"] },
+            { id: 11, word: "house", pos: "n.", meaning: "房子", category: "Dialogue", acceptableAnswers: ["house"] },
+            { id: 12, word: "quiet", pos: "adj.", meaning: "安靜的", category: "Dialogue", acceptableAnswers: ["quiet"] },
+            { id: 13, word: "style", pos: "n.", meaning: "風格；款式", category: "Dialogue", acceptableAnswers: ["style"] },
+            { id: 14, word: "idea", pos: "n.", meaning: "想法；點子", category: "Dialogue", acceptableAnswers: ["idea"] },
+            { id: 15, word: "let's...", pos: "", meaning: "我們一起……吧", category: "Dialogue", acceptableAnswers: ["let's...", "let's", "lets"] },
+            { id: 16, word: "get", pos: "v.", meaning: "獲得", category: "Dialogue", acceptableAnswers: ["get"] },
+            { id: 17, word: "some", pos: "adj. / pron.", meaning: "一些的；一些", category: "Dialogue", acceptableAnswers: ["some"] },
+            { id: 18, word: "tool", pos: "n.", meaning: "工具", category: "Dialogue", acceptableAnswers: ["tool"] },
+            { id: 19, word: "smartphone", pos: "n.", meaning: "智慧型手機", category: "Dialogue", acceptableAnswers: ["smartphone"] },
+            { id: 20, word: "step", pos: "n.", meaning: "步驟；一步", category: "Dialogue", acceptableAnswers: ["step"] },
+            { id: 21, word: "upload", pos: "v.", meaning: "上傳", category: "Dialogue", acceptableAnswers: ["upload"] },
+            { id: 22, word: "photo", pos: "n.", meaning: "相片", category: "Dialogue", acceptableAnswers: ["photo"] },
+            { id: 23, word: "choose", pos: "v.", meaning: "選擇", category: "Dialogue", acceptableAnswers: ["choose"] },
+            { id: 24, word: "type", pos: "n.", meaning: "種類", category: "Dialogue", acceptableAnswers: ["type"] },
+            { id: 25, word: "theme", pos: "n.", meaning: "主題", category: "Dialogue", acceptableAnswers: ["theme"] },
+            { id: 26, word: "wait", pos: "v.", meaning: "等待", category: "Dialogue", acceptableAnswers: ["wait"] },
+            { id: 27, word: "expensive", pos: "adj.", meaning: "昂貴的", category: "Dialogue", acceptableAnswers: ["expensive"] },
+            { id: 28, word: "with", pos: "prep.", meaning: "對……來說；和", category: "Dialogue", acceptableAnswers: ["with"] },
+            { id: 29, word: "question", pos: "n.", meaning: "問題", category: "Dialogue", acceptableAnswers: ["question"] },
+            { id: 30, word: "I see.", pos: "", meaning: "我了解了。", category: "Dialogue", acceptableAnswers: ["i see.", "i see"] },
+            
+            // Reading (31-40)
+            { id: 31, word: "soft", pos: "adj.", meaning: "柔軟的", category: "Reading", acceptableAnswers: ["soft"] },
+            { id: 32, word: "hard", pos: "adj.", meaning: "硬的", category: "Reading", acceptableAnswers: ["hard"] },
+            { id: 33, word: "in fact", pos: "", meaning: "事實上", category: "Reading", acceptableAnswers: ["in fact"] },
+            { id: 34, word: "around", pos: "prep. / adv.", meaning: "圍繞；到處", category: "Reading", acceptableAnswers: ["around"] },
+            { id: 35, word: "world", pos: "n.", meaning: "世界", category: "Reading", acceptableAnswers: ["world"] },
+            { id: 36, word: "kitchen", pos: "n.", meaning: "廚房", category: "Reading", acceptableAnswers: ["kitchen"] },
+            { id: 37, word: "beside", pos: "prep.", meaning: "在……旁邊", category: "Reading", acceptableAnswers: ["beside"] },
+            { id: 38, word: "ice", pos: "n.", meaning: "冰", category: "Reading", acceptableAnswers: ["ice"] },
+            { id: 39, word: "inside", pos: "prep. / adv.", meaning: "在……裡面；在室內", category: "Reading", acceptableAnswers: ["inside"] },
+            { id: 40, word: "blanket", pos: "n.", meaning: "毛毯", category: "Reading", acceptableAnswers: ["blanket"] }
+        ];
+
+        /**
+         * 2. 音效與語音模組
+         */
+        let audioInitialized = false;
+        let synth = null;
+
+        function initAudio() {
+            if (!audioInitialized && window.Tone) {
+                Tone.start();
+                synth = new Tone.PolySynth(Tone.Synth).toDestination();
+                synth.volume.value = -8;
+                audioInitialized = true;
+            }
+        }
+
+        function playSound(type) {
+            try {
+                initAudio();
+                if (!synth) return;
+                const now = Tone.now();
+                if (type === 'correct') {
+                    synth.triggerAttackRelease(["C5", "E5", "G5"], "16n", now);
+                } else if (type === 'wrong') {
+                    synth.triggerAttackRelease(["A3", "Eb3"], "8n", now);
+                } else if (type === 'click') {
+                    synth.triggerAttackRelease("C6", "32n", now);
+                } else if (type === 'stageClear') {
+                    synth.triggerAttackRelease("C5", "16n", now);
+                    synth.triggerAttackRelease("E5", "16n", now + 0.1);
+                    synth.triggerAttackRelease("G5", "16n", now + 0.2);
+                    synth.triggerAttackRelease("C6", "8n", now + 0.3);
+                }
+            } catch (e) {
+                // 忽略瀏覽器音訊限制錯誤
+            }
+        }
+
+        // 英文發音 (Web Speech API)
+        function speakWord(text) {
+            if (!('speechSynthesis' in window)) return;
+            window.speechSynthesis.cancel();
+            // 去除省略號以利自然發音 (例如 "let's..." -> "let's")
+            const cleanText = text.replace(/\.\.\./g, '');
+            const utterance = new SpeechSynthesisUtterance(cleanText);
+            utterance.lang = 'en-US';
+            utterance.rate = 0.88; // 稍微放慢一點適合國中生聽力
+            window.speechSynthesis.speak(utterance);
+        }
+
+        /**
+         * 3. 遊戲狀態管理
+         * 總分 100 分，共 40 題 => 每題 2.5 分！
+         */
+        const POINTS_PER_QUESTION = 2.5;
+
+        const gameState = {
+            currentStage: 0, // 0: 歡迎頁, 1~4: 四個關卡, 5: 結算頁
+            stageScores: [0, 0, 0, 0], // 各關得分 (滿分25)
+            stageQuestions: {
+                1: [], // 10題
+                2: [], // 10題 (分為 Round 1: 6題, Round 2: 4題)
+                3: [], // 10題
+                4: []  // 10題
+            },
+            qIndex: 0, // 當前關卡題目索引 (0~9)
+            isAnswering: false, // 防止重複點擊
+            wrongRecords: [], // 錯題紀錄
+
+            // 第2關配對專用狀態
+            matchRound: 1, // 1 (6組=12框) 或 2 (4組=8框，湊滿10題)
+            matchSelectedEn: null,
+            matchSelectedZh: null,
+            matchMatchedIds: new Set(),
+            matchAttemptedWrongIds: new Set(), // 記錄該單字是否曾配對錯誤(影響該題是否給分)
+            matchLeftCards: [],
+            matchRightCards: []
+        };
+
+        // 洗牌演算法
+        function shuffle(array) {
+            const arr = [...array];
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+
+        // 初始化全部 40 題題庫 (確保 40 個單字平均分配在 4 個關卡，每關不重複 10 題！)
+        function setupAllQuestions() {
+            const shuffledAll = shuffle(VOCAB_LIST);
+            gameState.stageQuestions[1] = shuffledAll.slice(0, 10);
+            gameState.stageQuestions[2] = shuffledAll.slice(10, 20);
+            gameState.stageQuestions[3] = shuffledAll.slice(20, 30);
+            gameState.stageQuestions[4] = shuffledAll.slice(30, 40);
+
+            gameState.stageScores = [0, 0, 0, 0];
+            gameState.wrongRecords = [];
+        }
+
+        // 計算目前總分
+        function getTotalScore() {
+            return gameState.stageScores.reduce((a, b) => a + b, 0);
+        }
+
+        // 計算已完成總題數 (0 ~ 40)
+        function getCompletedQuestionsCount() {
+            if (gameState.currentStage === 0) return 0;
+            if (gameState.currentStage === 5) return 40;
+            const prevStagesCount = (gameState.currentStage - 1) * 10;
+            if (gameState.currentStage === 2) {
+                return prevStagesCount + gameState.matchMatchedIds.size + (gameState.matchRound === 2 ? 6 : 0);
+            }
+            return prevStagesCount + gameState.qIndex;
+        }
+
+        // 更新頂部狀態列
+        function updateHeader() {
+            const header = document.getElementById('game-header');
+            if (gameState.currentStage === 0 || gameState.currentStage === 5) {
+                header.classList.add('hidden');
+                return;
+            }
+            header.classList.remove('hidden');
+
+            const stageNames = {
+                1: "看英選中",
+                2: "中英配對",
+                3: "聽音拼寫",
+                4: "看中拼寫"
+            };
+
+            document.getElementById('stage-badge').textContent = `第 ${gameState.currentStage} 關 / 共 4 關`;
+            document.getElementById('stage-title').textContent = stageNames[gameState.currentStage];
+            
+            let currentQDisplay = gameState.qIndex + 1;
+            if (gameState.currentStage === 2) {
+                const matchedTotal = (gameState.matchRound === 2 ? 6 : 0) + gameState.matchMatchedIds.size;
+                currentQDisplay = Math.min(10, matchedTotal + 1);
+            }
+            document.getElementById('progress-text').textContent = `${currentQDisplay} / 10 題`;
+            document.getElementById('score-text').textContent = getTotalScore();
+
+            const pct = (getCompletedQuestionsCount() / 40) * 100;
+            document.getElementById('total-progress-bar').style.width = `${pct}%`;
+        }
+
+        /**
+         * 4. 畫面渲染邏輯
+         */
+        const container = document.getElementById('game-container');
+
+        // 開始畫面
+        function renderStartScreen() {
+            gameState.currentStage = 0;
+            updateHeader();
+            container.innerHTML = `
+                <div class="text-center animate-pop space-y-6 py-2">
+                    <div class="inline-flex items-center gap-2 bg-indigo-100 text-indigo-700 px-4 py-1.5 rounded-full text-sm font-bold">
+                        <span>📘 國中一年級英文</span>
+                        <span>•</span>
+                        <span>Lesson 3 單字特訓</span>
+                    </div>
+                    
+                    <h1 class="text-3xl sm:text-4xl font-black text-slate-800 tracking-tight">
+                        英文單字闖關大挑戰
+                    </h1>
+                    
+                    <p class="text-slate-600 max-w-lg mx-auto text-sm sm:text-base leading-relaxed">
+                        收錄 Lesson 3 全部 <strong class="text-indigo-600">40 個單字與片語</strong>，分為 4 大關卡，每關 10 題（25 分），總分 100 分！準備好挑戰滿分了嗎？
+                    </p>
+
+                    <!-- 四大關卡介紹卡片 -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left max-w-2xl mx-auto">
+                        <div class="bg-blue-50/80 border border-blue-100 p-3.5 rounded-2xl flex items-start gap-3">
+                            <span class="bg-blue-600 text-white font-bold w-7 h-7 rounded-xl flex items-center justify-center shrink-0 mt-0.5">1</span>
+                            <div>
+                                <h3 class="font-bold text-slate-800">看英選中 <span class="text-xs font-normal text-blue-600">(25分)</span></h3>
+                                <p class="text-xs text-slate-500 mt-0.5">顯示英文單字與詞性，選出正確中文</p>
+                            </div>
+                        </div>
+                        <div class="bg-purple-50/80 border border-purple-100 p-3.5 rounded-2xl flex items-start gap-3">
+                            <span class="bg-purple-600 text-white font-bold w-7 h-7 rounded-xl flex items-center justify-center shrink-0 mt-0.5">2</span>
+                            <div>
+                                <h3 class="font-bold text-slate-800">中英配對 <span class="text-xs font-normal text-purple-600">(25分)</span></h3>
+                                <p class="text-xs text-slate-500 mt-0.5">畫面上一次顯示 12 個框框，配對正確中英</p>
+                            </div>
+                        </div>
+                        <div class="bg-amber-50/80 border border-amber-100 p-3.5 rounded-2xl flex items-start gap-3">
+                            <span class="bg-amber-500 text-white font-bold w-7 h-7 rounded-xl flex items-center justify-center shrink-0 mt-0.5">3</span>
+                            <div>
+                                <h3 class="font-bold text-slate-800">聽音拼寫 <span class="text-xs font-normal text-amber-600">(25分)</span></h3>
+                                <p class="text-xs text-slate-500 mt-0.5">聆聽單字發音，輸入正確英文拼法</p>
+                            </div>
+                        </div>
+                        <div class="bg-emerald-50/80 border border-emerald-100 p-3.5 rounded-2xl flex items-start gap-3">
+                            <span class="bg-emerald-600 text-white font-bold w-7 h-7 rounded-xl flex items-center justify-center shrink-0 mt-0.5">4</span>
+                            <div>
+                                <h3 class="font-bold text-slate-800">看中拼寫 <span class="text-xs font-normal text-emerald-600">(25分)</span></h3>
+                                <p class="text-xs text-slate-500 mt-0.5">根據中文提示，輸入正確英文拼法</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-2">
+                        <button onclick="startNewGame()" class="btn-push w-full sm:w-auto px-10 py-4 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold text-lg rounded-2xl shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 mx-auto cursor-pointer">
+                            <span>🚀 開始挑戰 (Start)</span>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 開始新遊戲
+        function startNewGame() {
+            initAudio();
+            playSound('click');
+            setupAllQuestions();
+            startStage(1);
+        }
+
+        // 進入指定關卡
+        function startStage(stageNum) {
+            gameState.currentStage = stageNum;
+            gameState.qIndex = 0;
+            gameState.isAnswering = false;
+            updateHeader();
+
+            if (stageNum === 1) renderStage1();
+            else if (stageNum === 2) initStage2();
+            else if (stageNum === 3) renderStage3();
+            else if (stageNum === 4) renderStage4();
+        }
+
+        // 關卡過場小結畫面
+        function renderStageTransition(completedStage) {
+            playSound('stageClear');
+            const stageScore = gameState.stageScores[completedStage - 1];
+            const nextStageNames = {
+                2: "第 2 關：中英配對 (12宮格配對)",
+                3: "第 3 關：聽音拼寫 (聽力挑戰)",
+                4: "第 4 關：看中拼寫 (終極拼字)"
+            };
+
+            container.innerHTML = `
+                <div class="text-center animate-pop space-y-6 py-6">
+                    <div class="w-20 h-20 bg-yellow-100 text-yellow-500 rounded-full flex items-center justify-center text-4xl mx-auto shadow-inner">
+                        🎉
+                    </div>
+                    <div>
+                        <p class="text-sm font-bold text-indigo-600 uppercase tracking-wider">Stage ${completedStage} Complete!</p>
+                        <h2 class="text-2xl sm:text-3xl font-black text-slate-800 mt-1">第 ${completedStage} 關完成！</h2>
+                    </div>
+
+                    <div class="bg-slate-50 border border-slate-200 rounded-2xl p-5 max-w-sm mx-auto">
+                        <div class="text-sm text-slate-500">本關得分</div>
+                        <div class="text-4xl font-black text-indigo-600 my-1">${stageScore} <span class="text-lg text-slate-400 font-bold">/ 25 分</span></div>
+                        <div class="text-xs text-slate-500 mt-2">目前累積總分：<strong class="text-slate-700">${getTotalScore()}</strong> / 100 分</div>
+                    </div>
+
+                    <div class="pt-2">
+                        <button onclick="startStage(${completedStage + 1})" class="btn-push px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-md cursor-pointer">
+                            前往 ${nextStageNames[completedStage + 1]} ➡️
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        /* =========================================================
+           第 1 關：看英選中 (題目顯示英文單字和詞性，選出正確中文)
+           ========================================================= */
+        function renderStage1() {
+            updateHeader();
+            const q = gameState.stageQuestions[1][gameState.qIndex];
+            gameState.isAnswering = false;
+
+            // 產生 3 個干擾選項 (優先選擇同詞性以增加鑑別度，不足再從全部補齊)
+            let samePosPool = VOCAB_LIST.filter(item => item.id !== q.id && item.meaning !== q.meaning && item.pos === q.pos);
+            let otherPool = VOCAB_LIST.filter(item => item.id !== q.id && item.meaning !== q.meaning && item.pos !== q.pos);
+            
+            let distractors = [];
+            samePosPool = shuffle(samePosPool);
+            otherPool = shuffle(otherPool);
+
+            while (distractors.length < 3) {
+                if (samePosPool.length > 0) {
+                    const pick = samePosPool.pop();
+                    if (!distractors.some(d => d.meaning === pick.meaning)) distractors.push(pick);
+                } else if (otherPool.length > 0) {
+                    const pick = otherPool.pop();
+                    if (!distractors.some(d => d.meaning === pick.meaning)) distractors.push(pick);
+                }
+            }
+
+            const options = shuffle([q, ...distractors]);
+
+            container.innerHTML = `
+                <div class="animate-pop space-y-6">
+                    <div class="flex items-center justify-between text-xs text-slate-400 font-medium">
+                        <span>單字來源：${q.category} (#${q.id})</span>
+                        <span>每題 2.5 分</span>
+                    </div>
+
+                    <!-- 題目區 -->
+                    <div class="bg-gradient-to-b from-blue-50 to-indigo-50/60 border-2 border-blue-100 rounded-3xl p-6 sm:p-8 text-center relative">
+                        <button onclick="speakWord('${q.word.replace(/'/g, "\\'")}')" title="點擊聽發音" class="absolute top-4 right-4 w-10 h-10 bg-white hover:bg-blue-100 text-blue-600 rounded-full shadow-sm flex items-center justify-center transition cursor-pointer">
+                            🔊
+                        </button>
+                        <div class="en-font text-3xl sm:text-5xl font-bold text-slate-800 tracking-wide mb-3">
+                            ${q.word}
+                        </div>
+                        ${q.pos ? `<span class="inline-block bg-blue-600 text-white text-xs sm:text-sm font-bold px-3.5 py-1 rounded-full">${q.pos}</span>` : `<span class="inline-block bg-slate-500 text-white text-xs font-bold px-3 py-1 rounded-full">片語 / 慣用語</span>`}
+                    </div>
+
+                    <!-- 選項區 -->
+                    <div id="stage1-options" class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        ${options.map((opt, idx) => `
+                            <button onclick="handleStage1Answer(this, ${opt.id === q.id})" 
+                                data-correct="${opt.id === q.id}"
+                                class="btn-push option-btn text-left p-4 rounded-2xl border-2 border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 bg-white font-bold text-slate-700 text-base sm:text-lg flex items-center gap-3 transition cursor-pointer">
+                                <span class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center text-sm font-black shrink-0">
+                                    ${['A', 'B', 'C', 'D'][idx]}
+                                </span>
+                                <span>${opt.meaning}</span>
+                            </button>
+                        `).join('')}
+                    </div>
+
+                    <!-- 回饋提示區 -->
+                    <div id="stage1-feedback" class="h-8 text-center font-bold text-sm sm:text-base"></div>
+                </div>
+            `;
+
+            // 自動朗讀一次單字幫助記憶
+            setTimeout(() => speakWord(q.word), 200);
+        }
+
+        function handleStage1Answer(btnEl, isCorrect) {
+            if (gameState.isAnswering) return;
+            gameState.isAnswering = true;
+
+            const q = gameState.stageQuestions[1][gameState.qIndex];
+            const allBtns = document.querySelectorAll('#stage1-options .option-btn');
+            const feedback = document.getElementById('stage1-feedback');
+
+            allBtns.forEach(btn => {
+                btn.disabled = true;
+                if (btn.dataset.correct === 'true') {
+                    btn.classList.remove('border-slate-200', 'bg-white');
+                    btn.classList.add('border-emerald-500', 'bg-emerald-50', 'text-emerald-800');
+                }
+            });
+
+            if (isCorrect) {
+                playSound('correct');
+                gameState.stageScores[0] += POINTS_PER_QUESTION;
+                feedback.innerHTML = `<span class="text-emerald-600">⭕ 答對了！+2.5 分</span>`;
+            } else {
+                playSound('wrong');
+                btnEl.classList.remove('border-slate-200', 'bg-white');
+                btnEl.classList.add('border-rose-500', 'bg-rose-50', 'text-rose-800', 'animate-shake');
+                feedback.innerHTML = `<span class="text-rose-600">❌ 答錯囉！正確意思是「${q.meaning}」</span>`;
+                gameState.wrongRecords.push({ stage: "第1關 看英選中", word: q.word, meaning: q.meaning });
+            }
+
+            updateHeader();
+
+            setTimeout(() => {
+                gameState.qIndex++;
+                if (gameState.qIndex < 10) {
+                    renderStage1();
+                } else {
+                    renderStageTransition(1);
+                }
+            }, isCorrect ? 850 : 1400);
+        }
+
+        /* =========================================================
+           第 2 關：中英配對 (畫面上一次顯示 12 個框框：6 中文 + 6 英文)
+           共 10 題 => 第一回合 6 組 (12個框框)，第二回合 4 組 (8個框框)
+           ========================================================= */
+        function initStage2() {
+            gameState.matchRound = 1;
+            setupMatchRound(1);
+        }
+
+        function setupMatchRound(round) {
+            gameState.matchRound = round;
+            gameState.matchSelectedEn = null;
+            gameState.matchSelectedZh = null;
+            gameState.matchMatchedIds = new Set();
+            gameState.matchAttemptedWrongIds = new Set();
+
+            // 第1回合取前 6 題 (12個框框)，第2回合取後 4 題 (8個框框)，共 10 題 = 25分
+            const roundItems = round === 1 
+                ? gameState.stageQuestions[2].slice(0, 6) 
+                : gameState.stageQuestions[2].slice(6, 10);
+
+            gameState.matchLeftCards = shuffle(roundItems);
+            gameState.matchRightCards = shuffle(roundItems);
+            renderStage2();
+        }
+
+        function renderStage2() {
+            updateHeader();
+            const isRound1 = gameState.matchRound === 1;
+            const totalBoxes = isRound1 ? 12 : 8;
+
+            container.innerHTML = `
+                <div class="animate-pop space-y-4">
+                    <div class="flex flex-wrap items-center justify-between gap-2 bg-purple-50 px-4 py-2.5 rounded-2xl border border-purple-100">
+                        <div class="text-xs sm:text-sm font-bold text-purple-800">
+                            回合 ${gameState.matchRound} / 2（本畫面共 ${totalBoxes} 個框框：${totalBoxes/2} 英 + ${totalBoxes/2} 中）
+                        </div>
+                        <div class="text-xs text-purple-600">
+                            點擊左側英文與右側中文進行配對
+                        </div>
+                    </div>
+
+                    <div id="match-feedback" class="h-6 text-center text-sm font-bold text-slate-600">
+                        請選擇一個英文單字與對應的中文解釋
+                    </div>
+
+                    <!-- 雙欄配對區 (手機版也並排顯示，方便左右點選) -->
+                    <div class="grid grid-cols-2 gap-3 sm:gap-5">
+                        <!-- 左側：英文單字框框 -->
+                        <div class="space-y-2.5">
+                            <div class="text-center text-xs font-bold text-slate-400 uppercase tracking-wider">English (英文)</div>
+                            ${gameState.matchLeftCards.map(item => {
+                                const isMatched = gameState.matchMatchedIds.has(item.id);
+                                const isSelected = gameState.matchSelectedEn === item.id;
+                                let btnStyle = "bg-white border-slate-200 text-slate-800 hover:border-purple-400";
+                                if (isMatched) btnStyle = "bg-emerald-50 border-emerald-300 text-emerald-600 opacity-50 cursor-default";
+                                else if (isSelected) btnStyle = "bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]";
+
+                                return `
+                                    <button id="en-card-${item.id}" 
+                                        onclick="selectMatchCard('en', ${item.id})"
+                                        ${isMatched ? 'disabled' : ''}
+                                        class="w-full min-h-[54px] sm:min-h-[60px] p-2.5 sm:p-3 rounded-2xl border-2 font-bold en-font text-sm sm:text-lg transition-all flex items-center justify-center text-center cursor-pointer ${btnStyle}">
+                                        ${item.word}
+                                    </button>
+                                `;
+                            }).join('')}
+                        </div>
+
+                        <!-- 右側：中文意思框框 -->
+                        <div class="space-y-2.5">
+                            <div class="text-center text-xs font-bold text-slate-400 uppercase tracking-wider">Chinese (中文)</div>
+                            ${gameState.matchRightCards.map(item => {
+                                const isMatched = gameState.matchMatchedIds.has(item.id);
+                                const isSelected = gameState.matchSelectedZh === item.id;
+                                let btnStyle = "bg-white border-slate-200 text-slate-700 hover:border-purple-400";
+                                if (isMatched) btnStyle = "bg-emerald-50 border-emerald-300 text-emerald-600 opacity-50 cursor-default";
+                                else if (isSelected) btnStyle = "bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]";
+
+                                return `
+                                    <button id="zh-card-${item.id}" 
+                                        onclick="selectMatchCard('zh', ${item.id})"
+                                        ${isMatched ? 'disabled' : ''}
+                                        class="w-full min-h-[54px] sm:min-h-[60px] p-2.5 sm:p-3 rounded-2xl border-2 font-bold text-xs sm:text-base transition-all flex items-center justify-center text-center cursor-pointer ${btnStyle}">
+                                        ${item.meaning}
+                                    </button>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function selectMatchCard(side, id) {
+            if (gameState.isAnswering) return;
+            initAudio();
+
+            const item = VOCAB_LIST.find(v => v.id === id);
+            if (side === 'en') {
+                speakWord(item.word);
+                gameState.matchSelectedEn = (gameState.matchSelectedEn === id) ? null : id;
+            } else {
+                playSound('click');
+                gameState.matchSelectedZh = (gameState.matchSelectedZh === id) ? null : id;
+            }
+
+            // 如果左右都選了，檢查是否配對成功
+            if (gameState.matchSelectedEn !== null && gameState.matchSelectedZh !== null) {
+                const enId = gameState.matchSelectedEn;
+                const zhId = gameState.matchSelectedZh;
+
+                if (enId === zhId) {
+                    // 配對成功！
+                    playSound('correct');
+                    gameState.matchMatchedIds.add(enId);
+                    
+                    // 若該題第一次就配對成功，給予 2.5 分
+                    if (!gameState.matchAttemptedWrongIds.has(enId)) {
+                        gameState.stageScores[1] += POINTS_PER_QUESTION;
+                    }
+
+                    gameState.matchSelectedEn = null;
+                    gameState.matchSelectedZh = null;
+                    renderStage2();
+
+                    const fb = document.getElementById('match-feedback');
+                    if (fb) fb.innerHTML = `<span class="text-emerald-600">✨ 配對成功！${!gameState.matchAttemptedWrongIds.has(enId) ? '+2.5 分' : ''}</span>`;
+
+                    // 檢查本回合是否全部配對完畢
+                    const targetCount = gameState.matchRound === 1 ? 6 : 4;
+                    if (gameState.matchMatchedIds.size === targetCount) {
+                        gameState.isAnswering = true;
+                        setTimeout(() => {
+                            gameState.isAnswering = false;
+                            if (gameState.matchRound === 1) {
+                                setupMatchRound(2);
+                            } else {
+                                renderStageTransition(2);
+                            }
+                        }, 800);
+                    }
+                } else {
+                    // 配對錯誤！
+                    playSound('wrong');
+                    gameState.isAnswering = true;
+
+                    // 記錄這兩個單字有配錯過
+                    if (!gameState.matchAttemptedWrongIds.has(enId)) {
+                        gameState.matchAttemptedWrongIds.add(enId);
+                        const wrongItem = VOCAB_LIST.find(v => v.id === enId);
+                        gameState.wrongRecords.push({ stage: "第2關 中英配對", word: wrongItem.word, meaning: wrongItem.meaning });
+                    }
+
+                    renderStage2();
+                    const enEl = document.getElementById(`en-card-${enId}`);
+                    const zhEl = document.getElementById(`zh-card-${zhId}`);
+                    if (enEl) enEl.classList.add('!bg-rose-500', '!border-rose-500', '!text-white', 'animate-shake');
+                    if (zhEl) zhEl.classList.add('!bg-rose-500', '!border-rose-500', '!text-white', 'animate-shake');
+                    
+                    const fb = document.getElementById('match-feedback');
+                    if (fb) fb.innerHTML = `<span class="text-rose-600">❌ 配對錯誤，請再試一次！</span>`;
+
+                    setTimeout(() => {
+                        gameState.matchSelectedEn = null;
+                        gameState.matchSelectedZh = null;
+                        gameState.isAnswering = false;
+                        renderStage2();
+                    }, 650);
+                }
+            } else {
+                renderStage2();
+            }
+        }
+
+        /* =========================================================
+           第 3 關：聽音拼寫 (題目念一個英文單字，輸入正確英文拼法)
+           ========================================================= */
+        function renderStage3() {
+            updateHeader();
+            const q = gameState.stageQuestions[3][gameState.qIndex];
+            gameState.isAnswering = false;
+
+            container.innerHTML = `
+                <div class="animate-pop space-y-6">
+                    <div class="flex items-center justify-between text-xs text-slate-400 font-medium">
+                        <span>聽力拼字測驗 (#${q.id})</span>
+                        <span>每題 2.5 分</span>
+                    </div>
+
+                    <!-- 喇叭播放區 -->
+                    <div class="bg-gradient-to-b from-amber-50 to-orange-50/70 border-2 border-amber-200 rounded-3xl p-6 sm:p-8 text-center space-y-4">
+                        <button onclick="speakWord('${q.word.replace(/'/g, "\\'")}')" 
+                            class="btn-push w-24 h-24 rounded-full bg-gradient-to-tr from-amber-500 to-orange-400 text-white text-4xl shadow-lg shadow-amber-500/30 flex items-center justify-center mx-auto hover:scale-105 transition cursor-pointer">
+                            🔊
+                        </button>
+                        <div>
+                            <p class="font-bold text-slate-700 text-base sm:text-lg">點擊喇叭重聽發音</p>
+                            <p class="text-xs text-slate-500 mt-1">
+                                提示：${q.pos ? `詞性為 <span class="font-bold text-amber-700">${q.pos}</span>` : '片語/慣用語'}，共 <span class="font-bold text-amber-700">${q.word.replace(/[^a-zA-Z]/g, '').length}</span> 個英文字母${q.word.includes(' ') ? '（包含空格）' : ''}
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 輸入表單 -->
+                    <form onsubmit="handleSpellingSubmit(event, 3)" class="space-y-4 max-w-md mx-auto">
+                        <div>
+                            <input type="text" id="spelling-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                                placeholder="請輸入聽到的英文單字..."
+                                class="en-font w-full text-center text-xl sm:text-2xl font-bold p-4 rounded-2xl border-2 border-slate-300 focus:border-amber-500 focus:outline-none bg-white shadow-inner transition" />
+                        </div>
+                        <button type="submit" id="spelling-submit-btn"
+                            class="btn-push w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-lg rounded-2xl shadow-md cursor-pointer">
+                            送出答案 (Submit)
+                        </button>
+                    </form>
+
+                    <!-- 回饋區 -->
+                    <div id="spelling-feedback" class="min-h-[32px] text-center font-bold text-sm sm:text-base"></div>
+                </div>
+            `;
+
+            setTimeout(() => {
+                speakWord(q.word);
+                const input = document.getElementById('spelling-input');
+                if (input) input.focus();
+            }, 250);
+        }
+
+        /* =========================================================
+           第 4 關：看中拼寫 (題目顯示中文，輸入正確英文拼法)
+           ========================================================= */
+        function renderStage4() {
+            updateHeader();
+            const q = gameState.stageQuestions[4][gameState.qIndex];
+            gameState.isAnswering = false;
+
+            // 給予首字母提示幫助國一學生降低挫折感 (例如: living room -> l_____ r___)
+            const hintPattern = q.word.split(' ').map(part => {
+                if (part.length <= 1) return part;
+                return part[0] + ' _'.repeat(part.length - 1);
+            }).join('   ');
+
+            container.innerHTML = `
+                <div class="animate-pop space-y-6">
+                    <div class="flex items-center justify-between text-xs text-slate-400 font-medium">
+                        <span>看中文拼單字 (#${q.id})</span>
+                        <span>每題 2.5 分</span>
+                    </div>
+
+                    <!-- 中文題目區 -->
+                    <div class="bg-gradient-to-b from-emerald-50 to-teal-50/70 border-2 border-emerald-200 rounded-3xl p-6 sm:p-8 text-center space-y-3">
+                        ${q.pos ? `<span class="inline-block bg-emerald-600 text-white text-xs sm:text-sm font-bold px-3.5 py-1 rounded-full">${q.pos}</span>` : `<span class="inline-block bg-teal-600 text-white text-xs font-bold px-3 py-1 rounded-full">片語 / 慣用語</span>`}
+                        <div class="text-2xl sm:text-4xl font-black text-slate-800 py-1">
+                            ${q.meaning}
+                        </div>
+                        <div class="en-font text-sm sm:text-base font-bold text-emerald-700 tracking-widest bg-white/80 inline-block px-4 py-1.5 rounded-xl border border-emerald-100">
+                            字首提示：${hintPattern}
+                        </div>
+                    </div>
+
+                    <!-- 輸入表單 -->
+                    <form onsubmit="handleSpellingSubmit(event, 4)" class="space-y-4 max-w-md mx-auto">
+                        <div>
+                            <input type="text" id="spelling-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                                placeholder="請輸入對應的英文單字..."
+                                class="en-font w-full text-center text-xl sm:text-2xl font-bold p-4 rounded-2xl border-2 border-slate-300 focus:border-emerald-500 focus:outline-none bg-white shadow-inner transition" />
+                        </div>
+                        <button type="submit" id="spelling-submit-btn"
+                            class="btn-push w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-lg rounded-2xl shadow-md cursor-pointer">
+                            送出答案 (Submit)
+                        </button>
+                    </form>
+
+                    <!-- 回饋區 -->
+                    <div id="spelling-feedback" class="min-h-[32px] text-center font-bold text-sm sm:text-base"></div>
+                </div>
+            `;
+
+            setTimeout(() => {
+                const input = document.getElementById('spelling-input');
+                if (input) input.focus();
+            }, 150);
+        }
+
+        // 第 3 關與第 4 關共用的拼寫批改邏輯
+        function handleSpellingSubmit(e, stageNum) {
+            e.preventDefault();
+            if (gameState.isAnswering) return;
+
+            const inputEl = document.getElementById('spelling-input');
+            const submitBtn = document.getElementById('spelling-submit-btn');
+            const feedbackEl = document.getElementById('spelling-feedback');
+            
+            // 正規化輸入：去除前後空白、將多個空白合併為單一空白、轉小寫
+            const userRaw = inputEl.value.trim().replace(/\s+/g, ' ');
+            if (!userRaw) {
+                inputEl.classList.add('animate-shake', 'border-rose-400');
+                setTimeout(() => inputEl.classList.remove('animate-shake', 'border-rose-400'), 400);
+                return;
+            }
+
+            gameState.isAnswering = true;
+            inputEl.disabled = true;
+            submitBtn.disabled = true;
+
+            const q = gameState.stageQuestions[stageNum][gameState.qIndex];
+            const userNormalized = userRaw.toLowerCase();
+
+            // 比對是否符合可接受答案清單
+            const isCorrect = q.acceptableAnswers.some(ans => ans.toLowerCase() === userNormalized);
+
+            // 朗讀正確單字加深印象
+            speakWord(q.word);
+
+            if (isCorrect) {
+                playSound('correct');
+                gameState.stageScores[stageNum - 1] += POINTS_PER_QUESTION;
+                inputEl.classList.remove('border-slate-300');
+                inputEl.classList.add('border-emerald-500', 'bg-emerald-50', 'text-emerald-700');
+                feedbackEl.innerHTML = `<span class="text-emerald-600">⭕ 太棒了！拼寫完全正確（${q.word} - ${q.meaning}）+2.5 分</span>`;
+            } else {
+                playSound('wrong');
+                inputEl.classList.remove('border-slate-300');
+                inputEl.classList.add('border-rose-500', 'bg-rose-50', 'text-rose-700', 'animate-shake');
+                feedbackEl.innerHTML = `
+                    <div class="text-rose-600">
+                        ❌ 拼錯囉！正確拼法是：<span class="en-font text-lg underline decoration-2 ml-1">${q.word}</span>（${q.meaning}）
+                    </div>
+                `;
+                gameState.wrongRecords.push({
+                    stage: stageNum === 3 ? "第3關 聽音拼寫" : "第4關 看中拼寫",
+                    word: q.word,
+                    meaning: q.meaning,
+                    userTyped: userRaw
+                });
+            }
+
+            updateHeader();
+
+            setTimeout(() => {
+                gameState.qIndex++;
+                if (gameState.qIndex < 10) {
+                    if (stageNum === 3) renderStage3();
+                    else renderStage4();
+                } else {
+                    if (stageNum === 3) renderStageTransition(3);
+                    else renderFinalResult();
+                }
+            }, isCorrect ? 1100 : 2000);
+        }
+
+        /* =========================================================
+           最終總結算畫面 (滿分 100 分)
+           ========================================================= */
+        function renderFinalResult() {
+            gameState.currentStage = 5;
+            updateHeader();
+            playSound('stageClear');
+
+            const total = getTotalScore();
+            let rankTitle = "";
+            let rankEmoji = "";
+            let rankColor = "";
+
+            if (total === 100) {
+                rankTitle = "單字滿分王！太神啦！";
+                rankEmoji = "👑";
+                rankColor = "text-amber-500";
+            } else if (total >= 80) {
+                rankTitle = "表現非常優秀！繼續保持！";
+                rankEmoji = "🌟";
+                rankColor = "text-indigo-600";
+            } else if (total >= 60) {
+                rankTitle = "順利及格過關！再複習一下更棒！";
+                rankEmoji = "👍";
+                rankColor = "text-emerald-600";
+            } else {
+                rankTitle = "加油！多聽多拼幾次就會進步喔！";
+                rankEmoji = "💪";
+                rankColor = "text-rose-600";
+            }
+
+            const stageLabels = [
+                "第 1 關：看英選中",
+                "第 2 關：中英配對",
+                "第 3 關：聽音拼寫",
+                "第 4 關：看中拼寫"
+            ];
+
+            container.innerHTML = `
+                <div class="animate-pop space-y-6 py-2">
+                    <div class="text-center space-y-2">
+                        <div class="text-5xl">${rankEmoji}</div>
+                        <h2 class="text-2xl sm:text-3xl font-black text-slate-800">挑戰完成！總成績結算</h2>
+                        <p class="font-bold ${rankColor} text-base sm:text-lg">${rankTitle}</p>
+                    </div>
+
+                    <!-- 總分大看板 -->
+                    <div class="bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-3xl p-6 text-center shadow-lg">
+                        <div class="text-sm text-blue-100 font-medium">最終總得分</div>
+                        <div class="text-5xl sm:text-6xl font-black my-1 tracking-tight">
+                            ${total} <span class="text-xl font-bold text-blue-200">/ 100 分</span>
+                        </div>
+                    </div>
+
+                    <!-- 各關得分明細 -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        ${gameState.stageScores.map((sc, idx) => `
+                            <div class="bg-slate-50 border border-slate-200 p-3 rounded-2xl text-center">
+                                <div class="text-xs text-slate-500 font-bold">${stageLabels[idx]}</div>
+                                <div class="text-xl font-black text-slate-800 mt-1">${sc} <span class="text-xs font-normal text-slate-400">/ 25</span></div>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <!-- 錯題複習區 -->
+                    ${gameState.wrongRecords.length > 0 ? `
+                        <div class="bg-rose-50/70 border border-rose-200 rounded-2xl p-4 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <h3 class="font-bold text-rose-800 text-sm sm:text-base">📝 錯題複習筆記（點擊單字可聽發音）</h3>
+                                <span class="text-xs bg-rose-200 text-rose-800 px-2.5 py-0.5 rounded-full font-bold">共 ${gameState.wrongRecords.length} 題</span>
+                            </div>
+                            <div class="max-h-48 overflow-y-auto space-y-2 pr-1">
+                                ${gameState.wrongRecords.map(rec => `
+                                    <div onclick="speakWord('${rec.word.replace(/'/g, "\\'")}')" 
+                                        class="bg-white p-3 rounded-xl border border-rose-100 flex flex-wrap items-center justify-between gap-2 hover:bg-rose-50 transition cursor-pointer">
+                                        <div>
+                                            <span class="text-xs text-slate-400 mr-2">[${rec.stage}]</span>
+                                            <span class="en-font font-bold text-slate-800 text-base">🔊 ${rec.word}</span>
+                                            <span class="text-sm text-slate-600 ml-2">${rec.meaning}</span>
+                                        </div>
+                                        ${rec.userTyped ? `<span class="text-xs text-rose-500 line-through">你的拼寫：${rec.userTyped}</span>` : ''}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : `
+                        <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-center text-emerald-700 font-bold">
+                            🎊 太厲害了！40 題全部一次答對，沒有任何錯題！
+                        </div>
+                    `}
+
+                    <!-- 重新挑戰按鈕 -->
+                    <div class="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+                        <button onclick="startNewGame()" class="btn-push px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-md cursor-pointer">
+                            🔄 重新洗牌再挑戰一次
+                        </button>
+                        <button onclick="renderStartScreen()" class="btn-push px-6 py-3.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-2xl cursor-pointer">
+                            🏠 回到首頁
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 網頁載入後顯示開始畫面
+        window.onload = () => {
+            renderStartScreen();
+        };
+    </script>
+</body>
+</html>
